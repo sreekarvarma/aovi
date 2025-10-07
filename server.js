@@ -7,22 +7,169 @@ const transcriptionService = require("./services/transcription");
 const aoviService = require("./services/aovi");
 const geodataService = require("./services/geodata");
 const qr = require("qr-image");
-const port = 3000;
 
-const { exec } = require("child_process");
-const fs = require("fs");
+const KeycloakAuthService = require("./services/auth/keycloak-auth.service");
+const { createAccessControlRouter } = require("./services/access-control");
+
+require('dotenv').config();
+
+// Rate limiting for magic link requests
+const magicLinkRequestLog = new Map(); // email -> { lastRequest: timestamp }
+const port = 3000;
 const app = express();
 const server = require("http").createServer(app);
+
+const authService = new KeycloakAuthService();
+app.set('authService', authService);
+
+// Initialize Keycloak middleware
+try {
+  app.use(authService.getSessionMiddleware());
+  app.use(authService.getKeycloakMiddleware());
+} catch (error) {
+  console.error('Error initializing Keycloak:', error);
+}
 
 app.use(cookieParser());
 app.use(express.json({ limit: "2mb" }));
 
-// Use the user service
-app.use("/aovi/user", userService.app);
-
 userService.connectDB().catch((err) => {
   console.error("Error connecting to database", err);
 });
+
+// Passwordless Authentication Endpoints
+app.post("/aovi/auth/magic-link", async (req, res) => {
+  try {
+    const { email, redirectUrl } = req.body;
+    
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email is required'
+      });
+    }
+    
+    // Rate limiting: 1 minute between requests
+    const emailLower = email.toLowerCase();
+    const requestInfo = magicLinkRequestLog.get(emailLower);
+    const now = Date.now();
+    
+    if (requestInfo && (now - requestInfo.lastRequest) < 60000) {
+      const waitTime = Math.ceil((60000 - (now - requestInfo.lastRequest)) / 1000);
+      return res.status(429).json({
+        success: false,
+        message: `Please wait ${waitTime} seconds before requesting another sign-in link.`
+      });
+    }
+    
+    magicLinkRequestLog.set(emailLower, { lastRequest: now });
+    
+    const result = await authService.generateMagicLink(email, redirectUrl);
+    res.json(result);
+  } catch (error) {
+    console.error('Error generating magic link:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to generate sign-in link'
+    });
+  }
+});
+
+app.get("/aovi/auth/verify-signin/:token", async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { redirect } = req.query;
+    
+    const result = await authService.verifyMagicLink(token);
+    
+    if (result.success) {
+      // Set session
+      req.session = req.session || {};
+      req.session.user = {
+        id: result.user_id,
+        email: result.email,
+        name: result.email,
+        authenticated: true,
+        auth_method: 'passwordless'
+      };
+      
+      // Save session explicitly
+      req.session.save((err) => {
+        if (err) {
+          console.error('Session save error:', err);
+        }
+        
+        // Normalize redirect URL for localhost
+        let redirectUrl = redirect || result.redirect_url || '/aovi/views/events';
+        
+        res.redirect(redirectUrl);
+      });
+    } else {
+      console.error('Magic link verification failed:', result);
+      res.redirect('/aovi/views/login?error=' + encodeURIComponent(result.error || 'Invalid sign-in link'));
+    }
+  } catch (error) {
+    console.error('Error verifying sign-in link:', error);
+    res.redirect('/aovi/views/login?error=' + encodeURIComponent('Failed to verify sign-in link'));
+  }
+});
+
+app.post("/aovi/auth/logout", (req, res) => {
+  req.session.destroy((err) => {
+    res.json({ success: true });
+  });
+});
+
+app.get("/aovi/auth/logout", (req, res) => {
+  req.session.destroy((err) => {
+    res.redirect('/aovi/views/login');
+  });
+});
+
+// Health check endpoint
+app.get("/health", (req, res) => {
+  res.status(200).json({ 
+    status: "healthy", 
+    timestamp: new Date().toISOString(),
+    version: process.env.npm_package_version || "1.0.0"
+  });
+});
+
+app.get("/aovi/auth/status", (req, res) => {
+  const user = req.session?.user || null;
+  
+  res.json({
+    authenticated: !!user,
+    user: user
+  });
+});
+
+// User info endpoint
+app.get("/aovi/user/me", (req, res) => {
+  const user = req.session?.user || null;
+  
+  if (!user) {
+    return res.status(401).json({ 
+      success: false, 
+      message: "Not authenticated" 
+    });
+  }
+  
+  const userResponse = {
+    ...user,
+    role: user.roles || user.role || []
+  };
+  
+  res.json(userResponse);
+});
+
+// Complete Access Control API
+try {
+  const accessControlRouter = createAccessControlRouter(authService);
+  app.use("/aovi/access-control", accessControlRouter);
+} catch (error) {
+  console.error('Error setting up access control routes:', error);
+}
 
 const io = require("socket.io")(server, {
   path: "/aovi-socket-io",
@@ -47,34 +194,43 @@ io.on("connection", (socket) => {
   });
 });
 
-redirectUnauthorized = (req, res, next) => {
-  if (req.body.authorized) {
+// New authentication middleware using passwordless sessions
+const requireAuthentication = (req, res, next) => {
+  if (req.session?.user?.authenticated) {
+    req.body = req.body || {};
+    req.body.user = req.session.user;
+    req.body.authorized = true;
     next();
   } else {
-    originalTarget = req.originalUrl;
+    const originalTarget = req.originalUrl;
     res.redirect("/aovi/views/login?targeturl=" + originalTarget);
   }
 };
 
-sendUnauthorizedStatus = (req, res, next) => {
-  if (!req.body.authorized) {
-    res.status(401).send("Unauthorized");
-    return;
-  } else {
+const requireAuthenticationAPI = (req, res, next) => {
+  if (req.session?.user?.authenticated) {
+    req.body = req.body || {};
+    req.body.user = req.session.user;
+    req.body.authorized = true;
     next();
+  } else {
+    res.status(401).json({ 
+      success: false, 
+      message: "Authentication required", 
+      redirect: "/aovi/views/login" 
+    });
   }
 };
 
+// Protected routes using new passwordless authentication
 app.use(
   "/aovi/comments",
-  userService.authorizeBasic,
-  sendUnauthorizedStatus,
+  requireAuthenticationAPI,
   commentService.router(io)
 );
 app.use(
   "/aovi/rooms",
-  userService.authorizeBasic,
-  redirectUnauthorized,
+  requireAuthentication,
   roomService.router
 );
 app.use("/aovi/transcription", transcriptionService(io));

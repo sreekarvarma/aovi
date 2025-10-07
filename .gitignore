@@ -78,6 +78,17 @@ web_modules/
 .env.test.local
 .env.production.local
 .env.local
+.env.production
+
+# Production files
+logs/
+*.log.*
+deployment/
+ssl/
+secrets/
+
+# Keycloak files with secrets (use template instead)
+keycloak/import/aovi-realm.json
 
 # parcel-bundler cache (https://parceljs.org/)
 .cache

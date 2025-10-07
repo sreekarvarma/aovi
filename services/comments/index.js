@@ -17,14 +17,13 @@ const commentSchema = new mongoose.Schema({
 // Create the Mongoose model
 const Comment = mongoose.model('Comment', commentSchema);
 
-
 publicCommentData = function(comment, recipientUserId){
     // turn comment into editable object
     comment = comment.toObject();
-    console.log('agree',comment.usersAgree);
-    console.log('disagree',comment.usersDisagree);
-    console.log('neutral',comment.usersNeutral);
-    console.log('recipientUserId',recipientUserId);
+    console.log('agree', comment.usersAgree);
+    console.log('disagree', comment.usersDisagree);
+    console.log('neutral', comment.usersNeutral);
+    console.log('recipientUserId', recipientUserId);
     const userId = recipientUserId.toString();
     // convert usersAgree, usersDisagree, usersNeutral to strings
     const usersAgree = comment.usersAgree.map(user => user.toString());
@@ -32,12 +31,11 @@ publicCommentData = function(comment, recipientUserId){
     const usersNeutral = comment.usersNeutral.map(user => user.toString());
    
     const myReaction = usersAgree.includes(userId) ? "agree" : usersDisagree.includes(userId) ? "disagree" : usersNeutral.includes(userId) ? "neutral" : "none";
-
     console.log('myReaction', myReaction);
 
     // userCategories: data ? data.userCategories ? data.userCategories : {} : {}
 
-    const data = comment.data ? comment.data : {};
+    const data = comment.data || {};
     const pc =  {
         _id: comment._id,
         text: comment.text,
@@ -49,57 +47,39 @@ publicCommentData = function(comment, recipientUserId){
         usersNeutral: comment.usersNeutral.length,
         myReaction: myReaction,
         data: data
-
-    }
-console.log('publicComment', pc);
-return pc;
+    };
+    console.log('publicComment', pc);
+    return pc;
 }
 
 function commentService(io) {
 // static files from client folder
 router.use('/static', express.static('./services/comments/client'));
 
-
 // expect json
 router.use(express.json());
 
-// // Delete all comments
-// router.get('/wipe', async (req, res) => {
-//     try {
-//         await Comment.deleteMany();
-//         // emit to all other clients
-//         io.emit('all comments deleted');
-//         res.status(200).send({ message: 'All comments deleted' });
-//     } catch (error) {
-//         res.status(500).send(error);
-//     }
-// });
-
-
 // Create a new comment
 router.post('/', async (req, res) => {
-
     console.log('req.body PRESAN', req.body);
     // sanitize text
-    sanitizeOptions = {
+    const sanitizeOptions = {
         allowedTags: [],
         allowedAttributes: [],
         disallowedTagsMode: 'escape'
+    };
+    
+    if (req.body.text) {
+        req.body.text = sanitizeHtml(req.body.text.toString(), sanitizeOptions);
     }
-    if(req.body.text){
-    req.body.text = sanitizeHtml(req.body.text.toString(), sanitizeOptions);
+    if (req.body.room) {
+        req.body.room = sanitizeHtml(req.body.room.toString(), sanitizeOptions);
     }
-    if(req.body.room){
-    req.body.room = sanitizeHtml(req.body.room.toString(), sanitizeOptions);
-    }
-    if(req.body.user && req.body.user.id){
-    req.body.user.id = sanitizeHtml(req.body.user.id.toString(), sanitizeOptions);
+    if (req.body.user && req.body.user.id) {
+        req.body.user.id = sanitizeHtml(req.body.user.id.toString(), sanitizeOptions);
     }
 
-    let data = {};
-    if(req.body.data){
-        data = req.body.data;
-    }
+    const data = req.body.data || {};
     
     // check if same user sent same text in the last 5 seconds
     const lastComment = await Comment.findOne({ text: req.body.text, author: req.body.user.id, createdAt: { $gt: new Date(Date.now() - 5000) } });
@@ -117,8 +97,9 @@ router.post('/', async (req, res) => {
         }
         const comment = new Comment(commentData);
         await comment.save();
+        
         // emit to all other clients
-        const publicComment = publicCommentData(comment, req.body.user.id)
+        const publicComment = publicCommentData(comment, req.body.user.id);
         console.log('publicComment', publicComment);
         io.to(comment.room).emit('comment created', publicComment);
         res.status(201).send(publicComment);
@@ -134,9 +115,7 @@ router.get('/', async (req, res) => {
     console.log('get all comments');
     try {
         const comments = await Comment.find();
-
-    const publicComments = comments.map(comment => publicCommentData(comment, req.body.user.id));
-
+        const publicComments = comments.map(comment => publicCommentData(comment, req.body.user.id));
         res.status(200).send(publicComments);
     } catch (error) {
         res.status(500).send(error);
@@ -145,36 +124,28 @@ router.get('/', async (req, res) => {
 
 
 router.get('/raw', async (req, res) => {
-    // check if user role includes superadmin
     if (!req.body.user || !req.body.user.role || !req.body.user.role.includes('superadmin')) {
         return res.status(403).send({ message: 'Forbidden' });
     }
-    console.log('get all comments raw');
     try {
         const comments = await Comment.find();
         res.status(200).send(comments);
     } catch (error) {
         res.status(500).send(error);
-        }
-    });
-
+    }
+});
 
 // Read comments by multiple rooms (for an event)
 router.get('/event/:rooms', async (req, res) => {
     console.log('get comments by event rooms', req.params.rooms);
     try {
-        // Split the comma-separated room IDs
         const roomIds = req.params.rooms.split(',');
-        
-        // Find comments for all the specified rooms
         const comments = await Comment.find({ room: { $in: roomIds } });
         
         if (!comments.length) {
-            res.status(200).send([]);
-            return;
+            return res.status(200).send([]);
         }
         
-        // Format for Excel export - include all relevant fields
         const exportComments = comments.map(comment => {
             const c = comment.toObject();
             return {
@@ -202,8 +173,7 @@ router.get('/room/:id', async (req, res) => {
     try {
         const comments = await Comment.find({ room: req.params.id });
         if (!comments.length) {
-            res.status(200).send([]);
-            return;
+            return res.status(200).send([]);
         }
         const publicComments = comments.map(comment => publicCommentData(comment, req.body.user.id));
         res.status(200).send(publicComments);
@@ -220,14 +190,13 @@ router.get('/:id', async (req, res) => {
         if (!comment) {
             return res.status(404).send();
         }
-        const publicComment = comment ? publicCommentData(comment, req.body.user.id) : null;
-        res.status(200).send(comment);
+        
+        const publicComment = publicCommentData(comment, req.body.user.id);
+        res.status(200).send(publicComment);
     } catch (error) {
         res.status(500).send(error);
     }
 });
-
-
 
 // Upvote a comment by ID
 router.post('/reaction/:id', async (req, res) => {
@@ -236,38 +205,41 @@ router.post('/reaction/:id', async (req, res) => {
     if (!['agree', 'disagree', 'neutral'].includes(reaction)) {
         return res.status(400).send({ message: 'Invalid reaction' });
     }
-    // try {
+    
+    try {
         const comment = await Comment.findById(req.params.id);
         if (!comment) {
             return res.status(404).send();
         }
+        
         const requestUserId = req.body.user.id.toString();
         comment.usersAgree = comment.usersAgree.filter(user => user.toString() !== requestUserId);
         comment.usersDisagree = comment.usersDisagree.filter(user => user.toString() !== requestUserId);
         comment.usersNeutral = comment.usersNeutral.filter(user => user.toString() !== requestUserId);
+        
         if (reaction === 'agree') {
             comment.usersAgree.push(req.body.user.id);
-        }
-        if (reaction === 'disagree') {
+        } else if (reaction === 'disagree') {
             comment.usersDisagree.push(req.body.user.id);
-        }
-        if (reaction === 'neutral') {
+        } else if (reaction === 'neutral') {
             comment.usersNeutral.push(req.body.user.id);
         }
+        
         // make unique
         comment.usersAgree = [...new Set(comment.usersAgree)];
         comment.usersDisagree = [...new Set(comment.usersDisagree)];
         comment.usersNeutral = [...new Set(comment.usersNeutral)];
+        
         await comment.save();
+        
         // emit to all other clients
-        const publicComment = comment ? publicCommentData(comment, req.body.user.id) : null;
+        const publicComment = publicCommentData(comment, req.body.user.id);
         io.to(publicComment.room).emit('comment reacted', publicComment);
-        res.status(200).send(comment);
-    // } catch (error) {
-        // res.status(500).send(error);
-    // }
-}
-);
+        res.status(200).send(publicComment);
+    } catch (error) {
+        res.status(500).send(error);
+    }
+});
 
 
 
@@ -275,7 +247,5 @@ router.post('/reaction/:id', async (req, res) => {
 return router;
 }
 
-
-
 // Export the service
-module.exports = {router:commentService,Comment};
+module.exports = { router: commentService, Comment };

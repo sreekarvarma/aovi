@@ -3,96 +3,438 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Register</title>
+    <title>AOVI Login</title>
     <script src="/aovi/user/static/authForm.js"></script>
     <script src="/aovi/static/languagepicker.js"></script>
-    <link rel="stylesheet" href="https://unpkg.com/sakura.css/css/sakura.css">
     <script src="/aovi/static/navigation.js"></script>
     <link rel="stylesheet" href="/aovi/static/style.css">
     
-    
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f5f5f5;
+            min-height: 100vh;
+        }
+
+        .login-container {
+            max-width: 400px;
+            margin: 50px auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            border: 1px solid #ddd;
+        }
+
+        .login-container h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #333;
+            font-size: 1.5rem;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+            width: 100%;
+            text-align: left;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 500;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+            box-sizing: border-box;
+            background: #fff;
+            margin: 0;
+            text-align: left;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #007bff;
+            box-shadow: 0 0 0 2px rgba(0,123,255,0.25);
+        }
+
+        .login-button {
+            width: 100%;
+            padding: 12px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 10px;
+            box-sizing: border-box;
+            position: static !important;
+            left: auto !important;
+            right: auto !important;
+            bottom: auto !important;
+        }
+
+        .login-button:hover {
+            background: #0056b3;
+        }
+
+        .login-button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+
+        .user-info {
+            text-align: center;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+
+        .status-message {
+            margin-top: 15px;
+            padding: 12px;
+            border-radius: 5px;
+            display: none;
+        }
+
+        .status-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .loading-spinner {
+            display: none;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #ffffff;
+            border-top: 2px solid transparent;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 8px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .btn-content {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .language-picker-container {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        @media (max-width: 480px) {
+            .login-container {
+                margin: 20px auto;
+                padding: 20px;
+            }
+        }
+    </style>
 </head>
 
 <body>
 <main-navigation></main-navigation>
-    
-</body>
 
+<div class="language-picker-container">
+    <language-picker languages="en,pt,fr,de"></language-picker>
+</div>
+    
+<div class="login-container">
+    <div id="logged-in-content" style="display: none;">
+        <div class="user-info">
+            <h2 data-translator-text="welcome_back">Welcome back!</h2>
+            <p data-translator-text="logged_in_as">You are already logged in as <span id="user-name"></span></p>
+            <div>
+                <button class="login-button" onclick="logout()" data-translator-text="logout">Logout</button>
+                <a href="#" id="continue-link" class="login-button" data-translator-text="continue_to_aovi">Continue to AOVI</a>
+            </div>
+        </div>
+    </div>
+
+    <div id="login-content">
+        <div class="magic-login-form">
+            <h1 data-translator-text="signin_title">Sign in to AOVI</h1>
+            
+            <form id="magicLinkForm">
+                <div class="form-group">
+                    <label for="email" data-translator-text="email_label">Email Address</label>
+                    <input 
+                        type="email" 
+                        id="email" 
+                        name="email" 
+                        required 
+                        data-translator-placeholder="email_placeholder"
+                        placeholder="Enter your email address"
+                        autocomplete="email"
+                    >
+                </div>
+
+                <button type="submit" class="login-button" id="submitBtn">
+                    <div class="btn-content">
+                        <div class="loading-spinner" id="loadingSpinner"></div>
+                        <span id="btnText" data-translator-text="send_signin_link">Send Sign-in Link</span>
+                    </div>
+                </button>
+            </form>
+
+            <div class="status-message" id="statusMessage"></div>
+        </div>
+    </div>
+</div>
 
 <script>
-
-
 const urlParams = new URLSearchParams(window.location.search);
-var targetUrl = urlParams.get('targeturl');
+let targetUrl = urlParams.get('targeturl');
 console.log('target url', targetUrl);
-// make sure target url string points to a view (e.g. /aovi/views...)
+
+// Make sure target url string points to a view (e.g. /aovi/views...)
 if (!targetUrl || !targetUrl.includes('views')) {
     targetUrl = '/aovi/views/events';
 }
 
-// set as target-url
-// console.log('setting target url', targetUrl);
-// document.querySelector('authentication-form').setAttribute('target-url', targetUrl);
-
-fetch('/aovi/user/me')
-.then(async response => {
-    if (response.status === 200) {
-        const body = document.querySelector('body');
-        const data = await response.json();
-        body.innerHTML += `  <p>Logged in as ${data.name}</p>`
-        const logoutButton = document.createElement('button');
-        logoutButton.innerText = 'Logout';
-        logoutButton.onclick = () => {
-            fetch('/aovi/user/logout', {method: 'GET'})
-            .then(response => {
-                // refresh page
-                window.location.href = window.location.href;
-            })
-        }
-        body.appendChild(logoutButton);
-        
-    } else {
-        const body = document.querySelector('body');
-        body.innerHTML += `<authentication-form
-            login-endpoint="/aovi/user/login"
-            register-endpoint="/aovi/user/register"
-            target-url="${targetUrl}"
-            ></authentication-form>`
-
+function normalizeUrl(url) {
+    if (url.startsWith('/')) {
+        return 'http://localhost:1041' + url;
     }
-    return response;
-    }).catch(error => {console.error('error', error);})
-
-
-
- 
-    alertBetaTesting = function(){
-    // check local storage if user has already seen the alert
-    // const seen = localStorage.getItem('seenBetaAlert_login');
-
-    alertText = {
-       "en": "Welcome! You are participating in a alpha test. Some features may be incomplete or unstable. Your participation will help improve the system. Please do not enter personal or sensitive information.",
-        "pt": "Bem-vindo! Você está participando de um teste alfa. Algumas funcionalidades podem estar incompletas ou instáveis. Sua participação ajudará a melhorar o sistema. Por favor, não insira informações pessoais ou sensíveis.",
-        "de": "Willkommen! Sie nehmen an einem Alpha-Test teil. Einige Funktionen sind möglicherweise unvollständig oder instabil. Ihre Teilnahme wird helfen, das System zu verbessern. Bitte geben Sie keine persönlichen oder sensiblen Informationen ein.",
-        "fr": "Bienvenue! Vous participez à un test alpha. Certaines fonctionnalités peuvent être incomplètes ou instables. Votre participation aidera à améliorer le système. Veuillez ne pas entrer d'informations personnelles ou sensibles."
-    }
-    alert(alertText[document.documentElement.lang]);
-    // // if user has not seen the alert, or seen it > 24 hours ago, show the alert
-    // if (seen && Date.now() - seen < 24 * 60 * 60 * 1000) {
-    //     return;
-    // }
-    // if (!seen) {
-        // alert(alertText[document.documentElement.lang]);
-    //     // set local storage to time stamp
-    //     localStorage.setItem('seenBetaAlert_login', Date.now());
-    // }
+    return url;
 }
-// after 3 seconds, show the alert
-setTimeout(() => {
-    alertBetaTesting();
-}, 500);
+
+// Check if user is already logged in
+async function checkLoginStatus() {
+    try {
+        const response = await fetch('/aovi/auth/status', {
+            credentials: 'include'
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            if (data.authenticated && data.user) {
+                showLoggedInState(data.user);
+                return;
+            }
+        }
+        
+        showLoginForm();
+    } catch (error) {
+        showLoginForm();
+    }
+}
+
+function showLoggedInState(userData) {
+    document.getElementById('logged-in-content').style.display = 'block';
+    document.getElementById('login-content').style.display = 'none';
+    document.getElementById('user-name').textContent = userData.name || userData.email || 'User';
+    document.getElementById('continue-link').href = targetUrl;
+}
+
+function showLoginForm() {
+    document.getElementById('logged-in-content').style.display = 'none';
+    document.getElementById('login-content').style.display = 'block';
+    initMagicLinkForm();
+}
+
+function logout() {
+    fetch('/aovi/auth/logout', {method: 'POST'})
+        .then(() => window.location.reload())
+        .catch(() => window.location.reload());
+}
+
+// Magic Link Form Functionality
+function initMagicLinkForm() {
+    const form = document.getElementById('magicLinkForm');
+    const emailInput = document.getElementById('email');
+    const submitBtn = document.getElementById('submitBtn');
+    const btnText = document.getElementById('btnText');
+    const loadingSpinner = document.getElementById('loadingSpinner');
+    const statusMessage = document.getElementById('statusMessage');
+
+    // Auto-focus email input
+    emailInput.focus();
+
+    // Clear messages on input change
+    emailInput.addEventListener('input', () => {
+        hideMessage();
+    });
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const email = emailInput.value.trim();
+        if (!email || !isValidEmail(email)) {
+            showMessage('Please enter a valid email address', 'error');
+            return;
+        }
+
+        if (submitBtn.disabled) return;
+        
+        setLoading(true);
+        
+        try {
+            const response = await fetch('/aovi/auth/magic-link', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email: email,
+                    redirectUrl: targetUrl
+                })
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                showMessage(`Sign-in link sent to ${email}! Check your email.`, 'success');
+                // Check auth status every 5 seconds after sending sign-in link
+                const checkInterval = setInterval(async () => {
+                    const authResponse = await fetch('/aovi/auth/status', { credentials: 'include' });
+                    if (authResponse.ok) {
+                        const data = await authResponse.json();
+                        if (data.authenticated) {
+                            clearInterval(checkInterval);
+                            window.location.href = targetUrl;
+                        }
+                    }
+                }, 5000);
+                
+                // Stop checking after 5 minutes
+                setTimeout(() => clearInterval(checkInterval), 300000);
+            } else {
+                showMessage(result.message || 'Failed to send sign-in link', 'error');
+            }
+        } catch (error) {
+            showMessage('Network error. Please try again.', 'error');
+        } finally {
+            setLoading(false);
+        }
+    });
+
+    function setLoading(loading) {
+        submitBtn.disabled = loading;
+        
+        if (loading) {
+            loadingSpinner.style.display = 'block';
+            btnText.textContent = t('sending_signin_link');
+        } else {
+            loadingSpinner.style.display = 'none';
+            btnText.textContent = t('send_signin_link');
+        }
+    }
+
+    function showMessage(message, type) {
+        statusMessage.textContent = message;
+        statusMessage.className = `status-message status-${type}`;
+        statusMessage.style.display = 'block';
+        
+        // Auto-hide success messages after 10 seconds
+        if (type === 'success') {
+            setTimeout(() => {
+                hideMessage();
+            }, 10000);
+        }
+    }
+
+    function hideMessage() {
+        statusMessage.style.display = 'none';
+    }
+
+    function isValidEmail(email) {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return emailRegex.test(email);
+    }
+}
 
 
 
+// Translations using existing translator system
+const translations = {
+    "en": {
+        "signin_title": "Sign in to AOVI",
+        "email_label": "Email Address",
+        "email_placeholder": "Enter your email address",
+        "send_signin_link": "Send Sign-in Link",
+        "welcome_back": "Welcome back!",
+        "logged_in_as": "You are already logged in as",
+        "logout": "Logout",
+        "continue_to_aovi": "Continue to AOVI",
+        "sending_signin_link": "Sending..."
+    },
+    "pt": {
+        "signin_title": "Entrar no AOVI",
+        "email_label": "Endereço de Email",
+        "email_placeholder": "Digite seu endereço de email",
+        "send_signin_link": "Enviar Link de Acesso",
+        "welcome_back": "Bem-vindo de volta!",
+        "logged_in_as": "Você já está logado como",
+        "logout": "Sair",
+        "continue_to_aovi": "Continuar para AOVI",
+        "sending_signin_link": "Enviando..."
+    },
+    "fr": {
+        "signin_title": "Se connecter à AOVI",
+        "email_label": "Adresse Email",
+        "email_placeholder": "Entrez votre adresse email",
+        "send_signin_link": "Envoyer le Lien de Connexion",
+        "welcome_back": "Bon retour!",
+        "logged_in_as": "Vous êtes déjà connecté en tant que",
+        "logout": "Se Déconnecter",
+        "continue_to_aovi": "Continuer vers AOVI",
+        "sending_signin_link": "Envoi en cours..."
+    },
+    "de": {
+        "signin_title": "Bei AOVI anmelden",
+        "email_label": "E-Mail-Adresse",
+        "email_placeholder": "Geben Sie Ihre E-Mail-Adresse ein",
+        "send_signin_link": "Anmelde-Link senden",
+        "welcome_back": "Willkommen zurück!",
+        "logged_in_as": "Sie sind bereits angemeldet als",
+        "logout": "Abmelden",
+        "continue_to_aovi": "Weiter zu AOVI",
+        "sending_signin_link": "Wird gesendet..."
+    }
+};
+
+// Initialize translator
+const t = translator(translations);
+
+function showLoggedInState(userData) {
+    document.getElementById('logged-in-content').style.display = 'block';
+    document.getElementById('login-content').style.display = 'none';
+    document.getElementById('user-name').textContent = userData.name || userData.email || 'User';
+    document.getElementById('continue-link').href = targetUrl;
+}
+
+function showLoginForm() {
+    document.getElementById('logged-in-content').style.display = 'none';
+    document.getElementById('login-content').style.display = 'block';
+    initMagicLinkForm();
+}
+
+// Initialize page
+checkLoginStatus();
 </script>
+
+</body>
 </html>

@@ -1,20 +1,31 @@
-version: '3'
 services:
   web:
+    build: .
     depends_on:
       - mongodb
-    image: aovi
+      - keycloak
     container_name: aovi-web
     ports:
-    # 3000:3000
       - "1041:3000"
+    volumes:
+      - .:/usr/src/app
+      - /usr/src/app/node_modules
     environment:
       - DOCKER=true
-      - JWT_SECRET_FILE=/run/secrets/jwt_secret
-      - SUPERADMIN_DEFAULT_PASSWORD=${SUPERADMIN_DEFAULT_PASSWORD}  # Pass from shell
-    volumes:
-      - jwt_secret_volume:/run/secrets
+      - JWT_SECRET=${JWT_SECRET}
+      - SUPERADMIN_DEFAULT_PASSWORD=${SUPERADMIN_DEFAULT_PASSWORD}
+      # Email Configuration
+      - SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASS=${SMTP_PASS}
+      # Keycloak Configuration
+      - KEYCLOAK_URL=http://keycloak:8080
+      - KEYCLOAK_REALM=aovi
+      - KEYCLOAK_CLIENT_ID=aovi-app
+      - KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET}
     restart: always
+
   mongodb:
     image: mongo
     container_name: aovi-mongodb
@@ -22,6 +33,39 @@ services:
     volumes:
       - aovi-mongodb-data:/data/db
 
+  postgres:
+    image: postgres:13
+    container_name: aovi-postgres
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+    volumes:
+      - keycloak-postgres-data:/var/lib/postgresql/data
+    restart: always
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:22.0
+    container_name: aovi-keycloak
+    command: start-dev --import-realm
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+      KC_HOSTNAME_STRICT: false
+      KC_HOSTNAME_STRICT_HTTPS: false
+      KC_HTTP_ENABLED: true
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+    volumes:
+      - ./keycloak/import:/opt/keycloak/data/import
+    restart: always
+
 volumes:
   aovi-mongodb-data:
-  jwt_secret_volume:
+  keycloak-postgres-data:

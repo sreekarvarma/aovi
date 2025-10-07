@@ -1,0 +1,76 @@
+{
+  "realm": "aovi",
+  "enabled": true,
+  "displayName": "AOVI Authentication",
+  "registrationAllowed": true,
+  "registrationEmailAsUsername": true,
+  "rememberMe": true,
+  "verifyEmail": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "editUsernameAllowed": false,
+  "users": [
+    {
+      "username": "superadmin",
+      "email": "superadmin@aovi.local",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Super",
+      "lastName": "Admin",
+      "realmRoles": ["superadmin", "admin", "basic"],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "CHANGE_THIS_PASSWORD_IN_PRODUCTION",
+          "temporary": true
+        }
+      ]
+    }
+  ],
+  "roles": {
+    "realm": [
+      {
+        "name": "superadmin",
+        "description": "Super Administrator with full system access"
+      },
+      {
+        "name": "admin",
+        "description": "Administrator with event and user management access"
+      },
+      {
+        "name": "basic",
+        "description": "Basic user with standard access"
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "aovi-app",
+      "name": "AOVI Application",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "REPLACE_WITH_SECURE_CLIENT_SECRET",
+      "redirectUris": [
+        "http://localhost:1041/*",
+        "http://localhost:3000/*",
+        "http://localhost:1041/aovi/*",
+        "http://localhost:1041/aovi/views/*",
+        "http://localhost:1041/aovi/auth/*"
+      ],
+      "webOrigins": [
+        "http://localhost:1041",
+        "http://localhost:3000",
+        "*"
+      ],
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "publicClient": false,
+      "protocol": "openid-connect",
+      "fullScopeAllowed": true
+    }
+  ],
+  "eventsEnabled": true,
+  "eventsListeners": ["jboss-logging"],
+  "adminEventsEnabled": true
+}

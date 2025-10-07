@@ -64,7 +64,6 @@ router.post("/", async (req, res) => {
     req.body.title = sanitizeHtml(req.body.title.toString(), sanitizeOptions);
   }
 
-  console.log("creating room", req.body);
 
   try {
     // Handle comment categories - sanitize if provided
@@ -88,11 +87,30 @@ router.post("/", async (req, res) => {
       containsRooms: req.body.containsRooms ? req.body.containsRooms : [],
     };
 
-    console.log("trying roomData", roomDataToCreate);
     const room = new Room(roomDataToCreate);
-    console.log("as room ob ject", room);
     await room.save();
-    console.log("room saved", room);
+
+    // Create access control for the new room
+    try {
+      const AccessControlService = require('../access-control/access-control.service');
+      const accessControl = new AccessControlService();
+      await accessControl.createItemAccess({
+        itemId: room._id,
+        itemType: 'room',
+        ownerId: req.body.user.id,
+        permissions: {
+          public: { read: false, write: false, delete: false },
+          roles: {
+            basic: { read: true, write: false, delete: false },
+            admin: { read: true, write: true, delete: false },
+            superadmin: { read: true, write: true, delete: true }
+          }
+        }
+      });
+    } catch (accessError) {
+      console.error('Failed to create access control for room:', accessError);
+      // Don't fail the room creation if access control fails
+    }
 
     if (req.body.parent) {
       const parentRoom = await Room.findById(req.body.parent.toString());
@@ -191,14 +209,10 @@ router.delete("/:id", async (req, res) => {
       return res.status(404).send({ message: "Room not found" });
     }
 
-    console.log("deleting room", room);
-    console.log("user", req.body.user);
-    console.log("room creator", room.createdBy.toString());
     const containedRooms = await Room.find({
       _id: { $in: room.containsRooms },
     });
 
-    // log all check values
     // Check if the user is the creator of the room
     if (
       room.createdBy.toString() === req.body.user.id.toString() ||
