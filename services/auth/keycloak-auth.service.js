@@ -43,9 +43,16 @@ class KeycloakAuthService {
     return session({
       secret: process.env.JWT_SECRET,
       resave: false,
-      saveUninitialized: true,
+      saveUninitialized: false,
       store: this.memoryStore,
-      cookie: { maxAge: 24 * 60 * 60 * 1000 }
+      name: 'connect.sid',
+      cookie: { 
+        maxAge: 24 * 60 * 60 * 1000, // 24 hours
+        httpOnly: true,
+        secure: true, // Required for HTTPS
+        sameSite: 'lax', // allows same-site navigation
+        path: '/'
+      }
     });
   }
 

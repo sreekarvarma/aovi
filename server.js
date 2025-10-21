@@ -97,9 +97,10 @@ app.get("/aovi/auth/verify-signin/:token", async (req, res) => {
       req.session.save((err) => {
         if (err) {
           console.error('Session save error:', err);
+          return res.redirect('/aovi/views/login?error=' + encodeURIComponent('Failed to save session'));
         }
         
-        // Normalize redirect URL for localhost
+        // Normalize redirect URL
         let redirectUrl = redirect || result.redirect_url || '/aovi/views/events';
         
         res.redirect(redirectUrl);
