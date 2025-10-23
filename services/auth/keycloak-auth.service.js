@@ -40,6 +40,8 @@ class KeycloakAuthService {
   }
 
   getSessionMiddleware() {
+    const isProduction = process.env.NODE_ENV === 'production';
+    
     return session({
       secret: process.env.JWT_SECRET,
       resave: false,
@@ -49,8 +51,8 @@ class KeycloakAuthService {
       cookie: { 
         maxAge: 24 * 60 * 60 * 1000, // 24 hours
         httpOnly: true,
-        secure: true, // Required for HTTPS
-        sameSite: 'lax', // allows same-site navigation
+        secure: isProduction,
+        sameSite: 'lax',
         path: '/'
       }
     });
